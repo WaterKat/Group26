@@ -19,9 +19,7 @@ rejection = "Sorry, this query cannot be processed. Please try one of the follow
 print("starting...")
 
 #! connect to mongodb
-mongodb_uri = "mongodb+srv://{}:{}@cecs327.1tbie.mongodb.net/?retryWrites=true&w=majority&appName=CECS327".format(
-    getenv("MONGODB_USER"), getenv("MONGODB_PASS")
-)
+mongodb_uri = getenv("MONGODB_URI")
 
 mongodb_client = MongoClient(mongodb_uri, server_api=ServerApi("1"))
 
