@@ -4,42 +4,84 @@ from pymongo.server_api import ServerApi
 from dotenv import load_dotenv
 import socket
 
-TCPsocket = socket.socket()
+load_dotenv()
 
-# Keep accepting server IP address and port number until valid
+#! vars
+tcp_socket = socket.socket()
+max_socket_timeouts = 30
+queries = [
+    "What is the average moisture inside my kitchen fridge in the past three hours?",
+    "What is the average water consumption per cycle in my smart dishwasher?",
+    "Which device consumed more electricity among my three IoT devices (two refrigerators and a dishwasher)?",
+]
+rejection = "Sorry, this query cannot be processed. Please try one of the following: " + ", ".join(queries)
+
+print("starting...")
+
+#! connect to mongodb
+mongodb_uri = "mongodb+srv://{}:{}@cecs327.1tbie.mongodb.net/?retryWrites=true&w=majority&appName=CECS327".format(
+    getenv("MONGODB_USER"), getenv("MONGODB_PASS")
+)
+
+mongodb_client = MongoClient(mongodb_uri, server_api=ServerApi("1"))
+
+try:
+    mongodb_client.admin.command("ping")
+    print("mongodb ping successful")
+except Exception as e:
+    print("mongodb ping failed", e)
+    exit(1)
+
+#! get information for the tcp server
+## Keep accepting server IP address and port number until valid
 while True:
-    TCPsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        # Prompt user for server IP address and server port
-        serverIP = input("Enter the host: ")
-        serverPort = int(input("Enter the server port number: "))
+        serverIP = input("enter the host ip: ")
+        serverPort = int(input("enter the server port number: "))
 
         # Create and bind socket
-        TCPsocket.bind((serverIP, serverPort))
-        print("Server started at port", serverPort)
+        tcp_socket.bind((serverIP, serverPort))
+        print("server started at port", serverPort)
         break
     except Exception as e:
-        print("Incorrect IP or port number: ", e)
+        print("error encountered: ", e)
+        print("please enter a valid ip address and port")
 
-TCPsocket.listen(5)
+tcp_socket.listen(5)
 
 # Keep accepting and transforming messages that are received
 while True:
-    incomingSock, incomingAddr = TCPsocket.accept()
-    print("Connected to ", incomingAddr)
+    client_socket, client_ip = tcp_socket.accept()
+    client_socket.settimeout(1)
+    socket_timeouts = 0
+    print("connected to: ", client_ip)
     while True:
         try:
-            # Get the received message
-            message = str(incomingSock.recv(1024).decode())
-            if not message:
+            received = client_socket.recv(1024)
+            if received == b"":
+                # If the client closes the connection, close the server connection
+                print(client_ip, "closed the connection")
                 break
+            message = received.decode()
+            if message not in queries:
+                client_socket.send(rejection.encode())
+                continue
+            #TODO: process the query and send the result back to the client
+            client_socket.send("Query received".encode())
+            client_socket.send(message.encode())
+        except socket.timeout as e:
+            # If the client is inactive for a certain amount of time, close the connection
+            socket_timeouts += 1
+            if socket_timeouts >= max_socket_timeouts:
+                print(client_ip, "timeout")
+                break
+            else:
+                continue
         except Exception as e:
-            print(incomingAddr,"error:", e)
-            incomingSock.close()
+            print(client_ip, "unexpected error:", e)
             break
-        print(incomingAddr, " < ", message)
-        # Transform the message
-        message = message.upper()
-        print(incomingAddr, " > ", message)
-        # Send the tranformed message back to the client
-        incomingSock.send(message.encode())
+    client_socket.close()
+    print("connection closed with: ", client_ip)
+    print("waiting for new connection...")
+    print("listening on host: ", serverIP, ", port: ", serverPort)
