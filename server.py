@@ -54,6 +54,7 @@ while True:
     client_socket.settimeout(1)
     socket_timeouts = 0
     print("connected to: ", client_ip)
+
     while True:
         try:
             received = client_socket.recv(1024)
@@ -66,8 +67,20 @@ while True:
                 client_socket.send(rejection.encode())
                 continue
             #TODO: process the query and send the result back to the client
-            client_socket.send("Query received".encode())
-            client_socket.send(message.encode())
+            db = mongodb_client.get_default_database()
+            if (message == queries[0]):
+                print("query 1 received")
+                client_socket.send("query 1".encode())
+            elif (message == queries[1]):
+                print("query 2 received")
+                client_socket.send("query 2".encode())
+            elif (message == queries[2]):
+                print("query 3 received")
+                client_socket.send("query 3".encode())
+            else:
+                print("query not found")
+                client_socket.send(rejection.encode())
+
         except socket.timeout as e:
             # If the client is inactive for a certain amount of time, close the connection
             socket_timeouts += 1
@@ -76,9 +89,11 @@ while True:
                 break
             else:
                 continue
+            
         except Exception as e:
             print(client_ip, "unexpected error:", e)
             break
+
     client_socket.close()
     print("connection closed with: ", client_ip)
     print("waiting for new connection...")
