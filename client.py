@@ -38,15 +38,13 @@ while int(choice) != 4:
     elif int(choice) not in range(1, 4):
         print("Sorry, that is not a valid query choice. Please try again.\n")
         continue
-    # try:
-    # Send message to server and receive
-    # TCPsocket.send(choice.encode())
-    # print("Received from server: ", TCPsocket.recv(1024).decode())
-    # TEST TODO: delete when input loop works
-    print("Sending to server...")
-    # except Exception as e:
-    #     print("Error sending message: ", e)
-    #     print()
-    #     break
+    try:
+        # Send message to server and receive
+        TCPsocket.send(choice.encode())
+        print("Received from server: ", TCPsocket.recv(1024).decode())
+    except Exception as e:
+        print("Error sending message: ", e)
+        print()
+        break
 
 TCPsocket.close()
