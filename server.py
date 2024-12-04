@@ -8,13 +8,94 @@ load_dotenv()
 
 #! vars
 tcp_socket = socket.socket()
-max_socket_timeouts = 30
+max_socket_timeouts = 60
+
 queries = [
     "What is the average moisture inside my kitchen fridge in the past three hours?",
     "What is the average water consumption per cycle in my smart dishwasher?",
     "Which device consumed more electricity among my three IoT devices (two refrigerators and a dishwasher)?",
 ]
-rejection = "Sorry, this query cannot be processed. Please try one of the following: " + ", ".join(queries)
+rejection = (
+    "Sorry, this query cannot be processed. Please try one of the following: "
+    + ", ".join(queries)
+)
+
+appliance_map = {"fr-1": "fridge 1", "fr-2": "fridge 2", "dw-1": "dishwasher"}
+
+query1Query = [
+    {
+        "$project": {
+            "timeSince": {
+                "$dateDiff": {
+                    "startDate": "$time",
+                    "endDate": "$$NOW",
+                    "unit": "hour",
+                },
+            },
+            "hygrometer": {
+                "$toDouble": "$payload.fr-1-hygrometer",
+            },
+        },
+    },
+    {
+        "$match": {
+            "hygrometer": {
+                "$exists": "true",
+                "$ne": "null",
+            },
+            "timeSince": {
+                "$lte": 3,
+            },
+        },
+    },
+    {
+        "$group": {
+            "_id": "null",
+            "avg-hygrometer": {
+                "$avg": "$hygrometer",
+            },
+        },
+    },
+]
+
+query2Query = [
+    {"$match": {"payload.dw-1-flowmeter": {"$exists": True}}},
+    {
+        "$group": {
+            "_id": None,
+            "flow": {"$avg": {"$toDouble": "$payload.dw-1-flowmeter"}},
+        }
+    },
+]
+
+query3Query = [
+    {
+        "$project": {
+            "uid": "$payload.parent_asset_uid",
+            "current": {
+                "$switch": {
+                    "branches": [
+                        {
+                            "case": {"$eq": ["$payload.parent_asset_uid", "fr-1"]},
+                            "then": "$payload.fr-1-ammeter",
+                        },
+                        {
+                            "case": {"$eq": ["$payload.parent_asset_uid", "fr-2"]},
+                            "then": "$payload.fr-2-ammeter",
+                        },
+                        {
+                            "case": {"$eq": ["$payload.parent_asset_uid", "dw-1"]},
+                            "then": "$payload.dw-1-ammeter",
+                        },
+                    ],
+                    "default": "null",
+                }
+            },
+        }
+    },
+    {"$group": {"_id": "$uid", "current": {"$max": "$current"}}},
+    {"$sort": {"current": -1}},
+]
 
 print("starting...")
 
@@ -66,17 +147,48 @@ while True:
             if message not in queries:
                 client_socket.send(rejection.encode())
                 continue
-            #TODO: process the query and send the result back to the client
-            db = mongodb_client.get_default_database()
-            if (message == queries[0]):
-                print("query 1 received")
-                client_socket.send("query 1".encode())
-            elif (message == queries[1]):
-                print("query 2 received")
-                client_socket.send("query 2".encode())
-            elif (message == queries[2]):
-                print("query 3 received")
-                client_socket.send("query 3".encode())
+            # TODO: process the query and send the result back to the client
+            col = mongodb_client.get_database("dataniz").get_collection(
+                "general_virtual"
+            )
+            if message == queries[0]:
+                aggr_result = col.aggregate(query1Query)
+                aggr_list = list(aggr_result)
+                if len(aggr_list) == 0:
+                    response_string = "No data found in the past three hours"
+                    print(f"sending response: {response_string}")
+                    client_socket.send(response_string.encode())
+                    continue
+                gph = aggr_list[0]["avg-hygrometer"] 
+                response_string = f"The average moisture inside your kitchen fridge in the past three hours is {int(gph)}%"
+                print(f"sending response: {response_string}")
+                client_socket.send(response_string.encode())
+            elif message == queries[1]:
+                aggr_result = col.aggregate(query2Query)
+                aggr_list = list(aggr_result)
+                if len(aggr_list) == 0:
+                    response_string = "No data found"
+                    print(f"sending response: {response_string}")
+                    client_socket.send(response_string.encode())
+                    continue
+                gph = aggr_list[0]["flow"]
+                cycle_hours = 2
+                gallons = gph * cycle_hours
+                response_string = f"The average water consumption per cycle in your smart dishwasher is {gph:.1f} gallons"
+                print(f"sending response: {response_string}")
+                client_socket.send(response_string.encode())
+            elif message == queries[2]:
+                aggr_result = col.aggregate(query3Query)
+                aggr_list = list(aggr_result)
+                if len(aggr_list) == 0:
+                    response_string = "No data found"
+                    print(f"sending response: {response_string}")
+                    client_socket.send(response_string.encode())
+                    continue
+                appliance = appliance_map[aggr_list[0]["_id"]]
+                response_string = f"The device that consumed more electricity among your three IoT devices is {appliance}"
+                print(f"sending response: {response_string}")
+                client_socket.send(response_string.encode())
             else:
                 print("query not found")
                 client_socket.send(rejection.encode())
@@ -89,7 +201,7 @@ while True:
                 break
             else:
                 continue
-            
+
         except Exception as e:
             print(client_ip, "unexpected error:", e)
             break
@@ -98,3 +210,7 @@ while True:
     print("connection closed with: ", client_ip)
     print("waiting for new connection...")
     print("listening on host: ", serverIP, ", port: ", serverPort)
+
+
+# { "payload.parent_asset_uid": "fr-1" }
+# { "avg-hygrometer" : { "$avg": "$payload.fr-1-hygrometer" } }
