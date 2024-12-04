@@ -1,11 +1,17 @@
 import socket
 
+queries = [
+    "What is the average moisture inside my kitchen fridge in the past three hours?",
+    "What is the average water consumption per cycle in my smart dishwasher?",
+    "Which device consumed more electricity among my three IoT devices (two refrigerators and a dishwasher)?",
+]
+
 TCPsocket = socket.socket()
 # Keep accepting server IP address and port number until valid
 while True:
     try:
         # Prompt user for server IP address and port
-        serverIP = input("Enter the server IP adress: ")
+        serverIP = input("Enter the server IP address: ")
         serverPort = int(input("Enter the server port number: "))
 
         # Create and connect socket
@@ -22,9 +28,9 @@ while True:
 choice = "0"
 while int(choice) != 4:
     choice = input("\nChoose a query (1-3) or Cancel (4):\n"
-                   "  1. What is the average moisture inside my kitchen fridge for the past 3 hours?\n"
-                   "  2. What is the average water consumption per cycle in my smart dishwasher?\n"
-                   "  3. Which device consumed more electricity among my three IoT devices?\n"
+                   "  1. " + queries[0] + "\n"
+                   "  2. " + queries[1] + "\n"
+                   "  3. " + queries[2] + "\n"
                    "  4. Cancel\n")
     if int(choice) == 4:
         print("Closing connection.")
