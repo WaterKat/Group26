@@ -40,7 +40,7 @@ while int(choice) != 4:
         continue
     try:
         # Send message to server and receive
-        TCPsocket.send(choice.encode())
+        TCPsocket.send(queries[int(choice) - 1].encode())
         print("Received from server: ", TCPsocket.recv(1024).decode())
     except Exception as e:
         print("Error sending message: ", e)
