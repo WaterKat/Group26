@@ -10,6 +10,21 @@ load_dotenv()
 tcp_socket = socket.socket()
 max_socket_timeouts = 60
 
+def LitersPerMinuteToGallonsPerMinute(lpm):
+    return lpm / 3.78541
+
+def MoistureToPercent(moisture):
+    return moisture * 100
+
+def ConvertCtoF(celsius):
+    return celsius * 9/5 + 32
+
+def AmpsToWatts(amps, volts, power_factor):
+    return amps * volts * power_factor
+
+def WattsToKilowattHours(watts, hours):
+    return watts * hours / 1000
+
 queries = [
     "What is the average moisture inside my kitchen fridge in the past three hours?",
     "What is the average water consumption per cycle in my smart dishwasher?",
@@ -145,12 +160,14 @@ while True:
                 break
             message = received.decode()
             if message not in queries:
+                print("received message: ", message)
                 client_socket.send(rejection.encode())
                 continue
             # TODO: process the query and send the result back to the client
             col = mongodb_client.get_database("dataniz").get_collection(
                 "general_virtual"
             )
+            metadata = mongodb_client.get_database("dataniz").get_collection("general_metadata")
             if message == queries[0]:
                 aggr_result = col.aggregate(query1Query)
                 aggr_list = list(aggr_result)
@@ -159,8 +176,15 @@ while True:
                     print(f"sending response: {response_string}")
                     client_socket.send(response_string.encode())
                     continue
-                gph = aggr_list[0]["avg-hygrometer"] 
-                response_string = f"The average moisture inside your kitchen fridge in the past three hours is {int(gph)}%"
+                reading = aggr_list[0]["avg-hygrometer"]/100
+                moisture_percentage = MoistureToPercent(reading)
+                if moisture_percentage is None:
+                    moisture_percentage = 0
+                if moisture_percentage < 0:
+                    moisture_percentage = 0
+                if moisture_percentage > 100:
+                    moisture_percentage = 100
+                response_string = f"The average moisture inside your kitchen fridge in the past three hours is {int(moisture_percentage)}%"
                 print(f"sending response: {response_string}")
                 client_socket.send(response_string.encode())
             elif message == queries[1]:
@@ -171,10 +195,10 @@ while True:
                     print(f"sending response: {response_string}")
                     client_socket.send(response_string.encode())
                     continue
-                gph = aggr_list[0]["flow"]
+                moisture_percentage = aggr_list[0]["flow"]
                 cycle_hours = 2
-                gallons = gph * cycle_hours
-                response_string = f"The average water consumption per cycle in your smart dishwasher is {gph:.1f} gallons"
+                gpm = LitersPerMinuteToGallonsPerMinute(moisture_percentage)
+                response_string = f"The average water consumption per cycle in your smart dishwasher is {moisture_percentage:.1f} gpm"
                 print(f"sending response: {response_string}")
                 client_socket.send(response_string.encode())
             elif message == queries[2]:
@@ -185,8 +209,18 @@ while True:
                     print(f"sending response: {response_string}")
                     client_socket.send(response_string.encode())
                     continue
-                appliance = appliance_map[aggr_list[0]["_id"]]
-                response_string = f"The device that consumed more electricity among your three IoT devices is {appliance}"
+                uid = aggr_list[0]["_id"]
+                amps = float(aggr_list[0]["current"])
+                watts = AmpsToWatts(amps, 120, 1)
+                wHours = WattsToKilowattHours(watts, 1.5)
+                device = metadata.find_one({"assetUid": uid})
+                if device is None:
+                    response_string = "No device found"
+                    print(f"sending response: {response_string}")
+                    client_socket.send(response_string.encode())
+                    continue
+                appliance = device["customAttributes"]["name"]
+                response_string = f"The device that consumed more electricity among your three IoT devices is {appliance} with {wHours:.1f} kWh"
                 print(f"sending response: {response_string}")
                 client_socket.send(response_string.encode())
             else:
