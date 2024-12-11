@@ -86,54 +86,37 @@ def GetQueryTwo(instanceUid):
         },
     ]
 
+
 def GetQueryThree():
     return [
-    {
-        '$project': {
-            'uid': '$payload.asset_uid', 
-            'current': {
-                '$switch': {
-                    'branches': [
-                        {
-                            'case': {
-                                '$eq': [
-                                    '$payload.parent_asset_uid', 'fr-1'
-                                ]
-                            }, 
-                            'then': '$payload.fr-1-ammeter'
-                        }, {
-                            'case': {
-                                '$eq': [
-                                    '$payload.parent_asset_uid', 'fr-2'
-                                ]
-                            }, 
-                            'then': '$payload.fr-2-ammeter'
-                        }, {
-                            'case': {
-                                '$eq': [
-                                    '$payload.parent_asset_uid', 'dw-1'
-                                ]
-                            }, 
-                            'then': '$payload.dw-1-ammeter'
-                        }
-                    ], 
-                    'default': 'null'
-                }
+        {
+            "$project": {
+                "uid": "$payload.asset_uid",
+                "current": {
+                    "$switch": {
+                        "branches": [
+                            {
+                                "case": {"$eq": ["$payload.parent_asset_uid", "fr-1"]},
+                                "then": "$payload.fr-1-ammeter",
+                            },
+                            {
+                                "case": {"$eq": ["$payload.parent_asset_uid", "fr-2"]},
+                                "then": "$payload.fr-2-ammeter",
+                            },
+                            {
+                                "case": {"$eq": ["$payload.parent_asset_uid", "dw-1"]},
+                                "then": "$payload.dw-1-ammeter",
+                            },
+                        ],
+                        "default": "null",
+                    }
+                },
             }
-        }
-    }, {
-        '$group': {
-            '_id': '$uid', 
-            'current': {
-                '$max': '$current'
-            }
-        }
-    }, {
-        '$sort': {
-            'current': -1
-        }
-    }
-]
+        },
+        {"$group": {"_id": "$uid", "current": {"$max": "$current"}}},
+        {"$sort": {"current": -1}},
+    ]
+
 
 meta_query = [
     {
@@ -274,7 +257,9 @@ while True:
                 amps = float(aggr_list[0]["current"])
                 watts = AmpsToWatts(amps, 120, 1)
                 wHours = WattsToKilowattHours(watts, 1.5)
-                matchingDevice = next((i for i in devices if i["instanceUid"] == instanceUid), None)
+                matchingDevice = next(
+                    (i for i in devices if i["instanceUid"] == instanceUid), None
+                )
                 if matchingDevice is None:
                     response_string = "No device found"
                     print(f"sending response: {response_string}")
